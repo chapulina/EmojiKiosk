@@ -1,0 +1,1169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <title>Emoji Sender</title>
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@700;900&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg:         #1a1040;
+      --card:       #2d2060;
+      --card-hover: #3d2e80;
+      --accent:     #FFD95A;
+      --flash:      #7FFFB2;
+      --danger:     #ff6b8a;
+      --text:       #ede8ff;
+      --text-dim:   rgba(237,232,255,0.45);
+      --tray-bg:    #120b30;
+      --bubble-out: #4a31b0;
+      --bubble-in:  #2d2060;
+      --radius:     20px;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      width: 100%; height: 100%;
+      overflow: hidden;
+      background: var(--bg);
+      font-family: 'Nunito', sans-serif;
+      color: var(--text);
+      touch-action: manipulation;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    /* ── SCREENS ── */
+    .screen {
+      position: absolute; inset: 0;
+      display: flex; flex-direction: column;
+      opacity: 0; pointer-events: none;
+      transition: opacity 0.2s ease;
+    }
+    .screen.active { opacity: 1; pointer-events: all; }
+
+    /* ════════════════════════════════
+       SCREEN 1 — CHAT LIST
+    ════════════════════════════════ */
+    #screenList { padding: 20px 16px 16px; gap: 0; }
+
+    .list-header { flex-shrink: 0; margin-bottom: 22px; }
+    .name-badge {
+      background: var(--accent); color: #1a1040;
+      font-size: clamp(1.1rem, 4vw, 1.5rem); font-weight: 900;
+      padding: 6px 20px; border-radius: 999px; display: inline-block;
+    }
+    .list-subtitle {
+      margin-top: 8px;
+      font-size: clamp(0.8rem, 3vw, 1rem); font-weight: 700;
+      color: var(--text-dim); padding-left: 4px;
+    }
+
+    .dest-list { display: flex; flex-direction: column; gap: 12px; overflow-y: auto; flex: 1; scrollbar-width: none; }
+    .dest-list::-webkit-scrollbar { display: none; }
+
+    .dest-card {
+      background: var(--card); border-radius: var(--radius);
+      padding: 18px 20px; display: flex; align-items: center; gap: 16px;
+      cursor: pointer; border: 2px solid transparent;
+      transition: background 0.12s, transform 0.1s;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .dest-card:active { background: var(--card-hover); transform: scale(0.97); }
+    .dest-avatar { font-size: clamp(2rem, 8vw, 2.8rem); line-height: 1; flex-shrink: 0; }
+    .dest-info { flex: 1; min-width: 0; }
+    .dest-name { font-size: clamp(1rem, 4vw, 1.3rem); font-weight: 900; }
+    .dest-preview { font-size: clamp(0.8rem, 3vw, 1rem); color: var(--text-dim); font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
+    .dest-arrow { font-size: 1.2rem; color: var(--text-dim); flex-shrink: 0; }
+
+    /* ════════════════════════════════
+       SCREEN 2 — CHAT VIEW
+    ════════════════════════════════ */
+    #screenChat { gap: 0; }
+
+    .chat-topbar {
+      flex-shrink: 0; display: flex; align-items: center; gap: 12px;
+      padding: 14px 14px 10px;
+      background: var(--tray-bg); border-bottom: 1px solid rgba(255,255,255,0.06);
+    }
+    .btn-icon {
+      background: var(--card); border: none; border-radius: 12px;
+      width: 42px; height: 42px; font-size: 1.2rem;
+      cursor: pointer; color: var(--text);
+      display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+      -webkit-tap-highlight-color: transparent;
+      transition: background 0.1s, transform 0.1s;
+    }
+    .btn-icon:active { background: var(--card-hover); transform: scale(0.9); }
+    .btn-refresh.spinning { animation: spin 0.7s linear; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .chat-topbar-avatar { font-size: 1.8rem; flex-shrink: 0; }
+    .chat-topbar-name { font-size: clamp(1rem, 4vw, 1.25rem); font-weight: 900; flex: 1; }
+
+    /* messages */
+    .msg-list {
+      flex: 1; overflow-y: auto; scrollbar-width: none;
+      padding: 14px 14px 6px;
+      display: flex; flex-direction: column; gap: 8px;
+    }
+    .msg-list::-webkit-scrollbar { display: none; }
+
+    .msg-row { display: flex; flex-direction: column; }
+    .msg-row.out { align-items: flex-end; }
+    .msg-row.in  { align-items: flex-start; }
+    .msg-sender { font-size: 0.72rem; font-weight: 700; color: var(--text-dim); margin-bottom: 3px; padding: 0 4px; }
+    .msg-bubble {
+      max-width: 80%; padding: 10px 14px; border-radius: 18px;
+      font-size: clamp(1.3rem, 5.5vw, 2rem); line-height: 1.3; word-break: break-all;
+    }
+    .msg-row.out .msg-bubble { background: var(--bubble-out); border-bottom-right-radius: 5px; }
+    .msg-row.in  .msg-bubble { background: var(--bubble-in);  border-bottom-left-radius:  5px; }
+    @keyframes bubblePop {
+      0%  { transform: scale(0.5); opacity: 0; }
+      70% { transform: scale(1.08); }
+      100%{ transform: scale(1);   opacity: 1; }
+    }
+    .msg-bubble.popping { animation: bubblePop 0.35s cubic-bezier(0.34,1.56,0.64,1) forwards; }
+    .msg-time { font-size: 0.68rem; font-weight: 700; color: var(--text-dim); margin-top: 3px; padding: 0 4px; }
+
+    .empty-chat {
+      flex: 1; display: flex; align-items: center; justify-content: center;
+      flex-direction: column; gap: 10px; opacity: 0.4;
+    }
+    .empty-chat .empty-icon { font-size: 3rem; }
+    .empty-chat .empty-text { font-size: 0.95rem; font-weight: 700; }
+
+    /* tray */
+    .tray-wrap {
+      flex-shrink: 0; background: var(--tray-bg);
+      border-top: 1px solid rgba(255,255,255,0.06);
+      padding: 8px 12px; display: flex; flex-direction: column; gap: 7px;
+    }
+    .tray-scroll {
+      min-height: 38px; max-height: 80px;
+      overflow-y: auto; scrollbar-width: none;
+      word-break: break-all;
+      font-size: clamp(1.2rem, 4.5vw, 1.8rem); line-height: 1.35;
+    }
+    .tray-scroll::-webkit-scrollbar { display: none; }
+    .tray-placeholder { font-size: clamp(0.78rem, 2.8vw, 0.9rem); font-weight: 700; color: var(--text-dim); line-height: 38px; }
+    .tray-actions { display: flex; gap: 8px; align-items: center; }
+    .btn-backspace {
+      background: var(--card); border: none; border-radius: 13px;
+      width: 46px; height: 46px; font-size: 1.25rem;
+      cursor: pointer; color: var(--text);
+      display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+      -webkit-tap-highlight-color: transparent;
+      transition: background 0.1s, transform 0.1s;
+    }
+    .btn-backspace:active { background: var(--card-hover); transform: scale(0.9); }
+    .btn-send {
+      flex: 1; background: var(--accent); border: none; border-radius: 13px; height: 46px;
+      font-family: 'Nunito', sans-serif; font-size: clamp(0.95rem, 3.5vw, 1.1rem); font-weight: 900;
+      color: #1a1040; cursor: pointer;
+      display: flex; align-items: center; justify-content: center; gap: 6px;
+      -webkit-tap-highlight-color: transparent;
+      transition: opacity 0.15s, transform 0.1s;
+    }
+    .btn-send:disabled { opacity: 0.28; }
+    .btn-send:not(:disabled):active { transform: scale(0.96); }
+    .count-badge {
+      background: #1a1040; color: var(--accent);
+      border-radius: 999px; font-size: 0.72rem; font-weight: 900;
+      padding: 1px 7px; min-width: 22px; text-align: center;
+    }
+
+    /* ── EMOJI PICKER ── */
+    .picker-wrap {
+      flex-shrink: 0;
+      display: flex; flex-direction: column;
+      background: var(--tray-bg);
+      border-top: 1px solid rgba(255,255,255,0.06);
+      /* takes remaining space up to a max */
+      height: 38vh;
+      min-height: 160px;
+    }
+
+    /* category tab strip */
+    .cat-tabs {
+      flex-shrink: 0;
+      display: flex;
+      overflow-x: auto; scrollbar-width: none;
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+      padding: 0 8px;
+    }
+    .cat-tabs::-webkit-scrollbar { display: none; }
+    .cat-tab {
+      flex-shrink: 0;
+      background: none; border: none;
+      padding: 8px 10px;
+      font-size: clamp(1.2rem, 4.5vw, 1.6rem);
+      cursor: pointer; opacity: 0.4;
+      border-bottom: 3px solid transparent;
+      transition: opacity 0.15s, border-color 0.15s;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .cat-tab.active { opacity: 1; border-bottom-color: var(--accent); }
+
+    /* emoji grid */
+    .emoji-grid {
+      flex: 1; overflow-y: auto; scrollbar-width: none;
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(min(52px, 13vw), 1fr));
+      gap: 4px; padding: 6px 8px;
+      align-content: start;
+    }
+    .emoji-grid::-webkit-scrollbar { display: none; }
+
+    .emoji-btn {
+      aspect-ratio: 1; background: none; border: none;
+      border-radius: 10px;
+      font-size: clamp(1.4rem, 5.5vw, 2rem);
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      -webkit-tap-highlight-color: transparent;
+      transition: background 0.1s, transform 0.1s;
+    }
+    .emoji-btn:active { background: var(--card-hover); transform: scale(0.85); }
+
+    /* status bar */
+    .status-bar {
+      flex-shrink: 0; text-align: center;
+      padding: 3px 0 5px;
+      font-size: 0.78rem; font-weight: 700; color: var(--text-dim);
+      background: var(--tray-bg);
+      transition: color 0.2s; min-height: 20px;
+    }
+    .status-bar.sending { color: var(--accent); }
+    .status-bar.sent    { color: var(--flash);  }
+    .status-bar.error   { color: var(--danger); }
+
+    @keyframes flashFade { 0% { opacity: 0.4; } 100% { opacity: 0; } }
+    .sent-flash {
+      position: fixed; inset: 0; background: var(--flash);
+      pointer-events: none; z-index: 999;
+      animation: flashFade 0.5s ease-out forwards;
+    }
+
+    /* ════════════════════════════════
+       SETUP SCREEN
+    ════════════════════════════════ */
+    #screenSetup {
+      overflow-y: auto;
+      scrollbar-width: none;
+      padding: 24px 18px 32px;
+      gap: 20px;
+    }
+    #screenSetup::-webkit-scrollbar { display: none; }
+
+    .setup-logo {
+      font-size: 2.8rem;
+      text-align: center;
+      flex-shrink: 0;
+    }
+    .setup-title {
+      text-align: center;
+      font-size: clamp(1.2rem, 4.5vw, 1.6rem);
+      font-weight: 900;
+      flex-shrink: 0;
+      line-height: 1.2;
+    }
+    .setup-title span { color: var(--accent); }
+
+    .setup-section {
+      background: var(--card);
+      border-radius: var(--radius);
+      padding: 16px 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      flex-shrink: 0;
+    }
+    .setup-section-title {
+      font-size: 0.8rem;
+      font-weight: 900;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--accent);
+    }
+    .setup-step {
+      font-size: clamp(0.8rem, 3vw, 0.92rem);
+      font-weight: 700;
+      color: var(--text);
+      line-height: 1.5;
+      display: flex;
+      gap: 10px;
+      align-items: flex-start;
+    }
+    .setup-step-num {
+      background: var(--accent);
+      color: #1a1040;
+      border-radius: 999px;
+      width: 22px; height: 22px;
+      font-size: 0.72rem; font-weight: 900;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+      margin-top: 1px;
+    }
+    .setup-step code {
+      background: rgba(255,255,255,0.1);
+      border-radius: 5px;
+      padding: 1px 5px;
+      font-family: monospace;
+      font-size: 0.88em;
+      color: var(--flash);
+    }
+
+    .setup-field { display: flex; flex-direction: column; gap: 5px; }
+    .setup-label {
+      font-size: 0.78rem; font-weight: 900;
+      color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.06em;
+    }
+    .setup-input {
+      background: var(--tray-bg);
+      border: 2px solid rgba(255,255,255,0.1);
+      border-radius: 12px;
+      padding: 10px 14px;
+      font-family: 'Nunito', sans-serif;
+      font-size: clamp(0.9rem, 3.5vw, 1rem);
+      font-weight: 700;
+      color: var(--text);
+      width: 100%;
+      outline: none;
+      transition: border-color 0.15s;
+      user-select: text;
+      -webkit-user-select: text;
+    }
+    .setup-input:focus { border-color: var(--accent); }
+    .setup-input::placeholder { color: var(--text-dim); }
+
+    .dest-editor { display: flex; flex-direction: column; gap: 8px; }
+    .dest-row {
+      display: flex; gap: 7px; align-items: center;
+    }
+    .dest-row .setup-input { flex: 1; }
+    .dest-row .input-avatar {
+      width: 46px; flex-shrink: 0;
+      text-align: center;
+      font-size: 1.3rem;
+      padding: 8px 6px;
+    }
+    .dest-row .input-chatid {
+      width: 120px; flex-shrink: 0;
+      font-family: monospace;
+      font-size: 0.82rem;
+    }
+    .btn-add-dest {
+      background: none; border: 2px dashed rgba(255,255,255,0.2);
+      border-radius: 12px; padding: 9px;
+      color: var(--text-dim); font-family: 'Nunito', sans-serif;
+      font-size: 0.88rem; font-weight: 700;
+      cursor: pointer; text-align: center;
+      transition: border-color 0.15s, color 0.15s;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .btn-add-dest:active { border-color: var(--accent); color: var(--accent); }
+
+    .btn-remove-dest {
+      background: none; border: none;
+      color: var(--danger); font-size: 1rem;
+      cursor: pointer; padding: 4px 6px; flex-shrink: 0;
+      -webkit-tap-highlight-color: transparent;
+      opacity: 0.7;
+    }
+    .btn-remove-dest:active { opacity: 1; }
+
+    .kiosk-instructions {
+      font-size: clamp(0.78rem, 3vw, 0.88rem);
+      font-weight: 700;
+      color: var(--text-dim);
+      line-height: 1.6;
+    }
+    .kiosk-instructions b { color: var(--text); }
+
+    .btn-save-setup {
+      background: var(--accent);
+      border: none; border-radius: var(--radius);
+      padding: 16px;
+      font-family: 'Nunito', sans-serif;
+      font-size: clamp(1rem, 4vw, 1.2rem); font-weight: 900;
+      color: #1a1040;
+      cursor: pointer;
+      flex-shrink: 0;
+      transition: opacity 0.15s, transform 0.1s;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .btn-save-setup:active { transform: scale(0.97); }
+
+    .setup-error {
+      background: rgba(255,107,138,0.15);
+      border: 1px solid var(--danger);
+      border-radius: 12px;
+      padding: 10px 14px;
+      font-size: 0.85rem; font-weight: 700;
+      color: var(--danger);
+      flex-shrink: 0;
+      display: none;
+    }
+    .setup-error.visible { display: block; }
+
+    /* cog button on list screen */
+    .btn-settings {
+      background: none; border: none;
+      font-size: 1.3rem; cursor: pointer;
+      color: var(--text-dim); padding: 4px;
+      -webkit-tap-highlight-color: transparent;
+      transition: color 0.15s;
+    }
+    .btn-settings:active { color: var(--accent); }
+  </style>
+</head>
+<body>
+
+<script>
+  /* ════════════════════════════════════════════════
+     CONFIG — edit these per child
+  ════════════════════════════════════════════════ */
+  const CHILD_NAME = "Sofia";
+  const BOT_TOKEN  = "YOUR_BOT_TOKEN";
+
+  const DESTINATIONS = [
+    { avatar: "👨‍👩‍👧", label: "Family",  chatId: "-100123456789", storageKey: "chat_family"  },
+    { avatar: "👵",     label: "Grandma", chatId: "987654321",      storageKey: "chat_grandma" },
+    { avatar: "👴",     label: "Grandpa", chatId: "876543210",      storageKey: "chat_grandpa" },
+    { avatar: "🧑",     label: "Papa",    chatId: "765432109",      storageKey: "chat_papa"    },
+  ];
+
+  const MAX_EMOJIS = 200;
+  const MAX_STORED = 60;
+
+  /* ════════════════════════════════════════════════
+     EMOJI DATA  — Unicode 15 grouped by category
+     Source: unicode.org/Public/emoji/15.0/emoji-test.txt
+  ════════════════════════════════════════════════ */
+  const EMOJI_CATEGORIES = [
+    {
+      icon: "😀", label: "Smileys",
+      emojis: [
+        "😀","😃","😄","😁","😆","😅","🤣","😂","🙂","🙃","🫠","😉","😊","😇",
+        "🥰","😍","🤩","😘","😗","☺️","😚","😙","🥲","😋","😛","😜","🤪","😝",
+        "🤑","🤗","🤭","🫢","🫣","🤫","🤔","🫡","🤐","🤨","😐","😑","😶","🫥",
+        "😶‍🌫️","😏","😒","🙄","😬","😮‍💨","🤥","🫨","😌","😔","😪","🤤","😴","😷",
+        "🤒","🤕","🤢","🤮","🤧","🥵","🥶","🥴","😵","😵‍💫","🤯","🤠","🥳","🥸",
+        "😎","🤓","🧐","😕","🫤","😟","🙁","☹️","😮","😯","😲","😳","🥺","🥹",
+        "😦","😧","😨","😰","😥","😢","😭","😱","😖","😣","😞","😓","😩","😫",
+        "🥱","😤","😡","😠","🤬","😈","👿","💀","☠️","💩","🤡","👹","👺","👻",
+        "👽","👾","🤖","😺","😸","😹","😻","😼","😽","🙀","😿","😾",
+        "🙈","🙉","🙊","💌","💘","💝","💖","💗","💓","💞","💕","💟","❣️","💔",
+        "❤️‍🔥","❤️‍🩹","❤️","🩷","🧡","💛","💚","💙","🩵","💜","🤎","🖤","🩶","🤍",
+        "💋","💯","💢","💥","💫","💦","💨","🕳️","💬","💭","💤",
+        "👋","🤚","🖐️","✋","🖖","🫱","🫲","🫳","🫴","🫷","🫸","👌","🤌","🤏",
+        "✌️","🤞","🫰","🤟","🤘","🤙","👈","👉","👆","🖕","👇","☝️","🫵","👍",
+        "👎","✊","👊","🤛","🤜","👏","🙌","🫶","👐","🤲","🤝","🙏","✍️","💅",
+        "🤳","💪","🦾","🦿","🦵","🦶","👂","🦻","👃","🫀","🫁","🧠","🦷","🦴",
+        "👀","👁️","👅","👄","🫦","👶","🧒","👦","👧","🧑","👱","👨","🧔","👩",
+        "🧓","👴","👵","🙍","🙎","🙅","🙆","💁","🙋","🧏","🙇","🤦","🤷",
+        "👮","🕵️","💂","🥷","👷","🫅","🤴","👸","👳","👲","🧕","🤵","👰",
+        "🤰","🫃","🫄","🤱","👼","🎅","🤶","🧑‍🎄","🦸","🦹","🧙","🧝","🧛",
+        "🧟","🧌","🧜","🧚","🧑‍🦰","🧑‍🦱","🧑‍🦳","🧑‍🦲","🧑‍⚕️","🧑‍🎓","🧑‍🏫","🧑‍⚖️","🧑‍🌾","🧑‍🍳",
+        "🧑‍🔧","🧑‍🏭","🧑‍💼","🧑‍🔬","🧑‍🎨","🧑‍🚒","🧑‍✈️","🧑‍🚀","🧑‍💻","🧑‍🎤","🧑‍🎶","🧑‍🎬","🧑‍🏋️",
+        "🧑‍🤝‍🧑","👫","👬","👭","💏","💑","👪",
+      ]
+    },
+    {
+      icon: "🐶", label: "Animals",
+      emojis: [
+        "🐶","🐱","🐭","🐹","🐰","🦊","🐻","🐼","🐻‍❄️","🐨","🐯","🦁","🐮","🐷",
+        "🐽","🐸","🐵","🙈","🙉","🙊","🐒","🐔","🐧","🐦","🐤","🐣","🐥","🦆",
+        "🦅","🦉","🦇","🐺","🐗","🐴","🦄","🐝","🪱","🐛","🦋","🐌","🐞","🐜",
+        "🪲","🦟","🦗","🪳","🕷️","🦂","🐢","🐍","🦎","🦖","🦕","🐙","🦑","🪼",
+        "🦐","🦞","🦀","🐡","🐠","🐟","🐬","🐳","🐋","🦈","🐊","🐅","🐆","🦓",
+        "🦍","🦧","🦣","🐘","🦛","🦏","🐪","🐫","🦒","🦘","🦬","🐃","🐂","🐄",
+        "🫎","🫏","🐎","🐖","🐏","🐑","🦙","🐐","🦌","🐕","🐩","🦮","🐕‍🦺","🐈",
+        "🐈‍⬛","🪶","🐓","🦃","🦤","🦚","🦜","🦢","🪽","🦩","🕊️","🐇","🦝","🦨",
+        "🦡","🦫","🦦","🦥","🐁","🐀","🐿️","🦔","🐾","🐉","🐲","🌵","🎄","🌲",
+        "🌳","🌴","🪵","🌱","🌿","☘️","🍀","🎍","🎋","🍃","🍂","🍁","🪺","🪹",
+        "🍄","🌾","💐","🌷","🌹","🥀","🪷","🌺","🌸","🌼","🌻","🌞","🌝","🌛",
+        "🌜","🌚","🌕","🌖","🌗","🌘","🌑","🌒","🌓","🌔","🌙","🌟","⭐","🌠",
+        "🌌","☀️","⛅","🌤️","🌥️","🌦️","🌧️","⛈️","🌩️","🌨️","❄️","☃️","⛄","🌬️",
+        "💨","💧","💦","🌊","🌈","🌂","☂️","☔","⛱️","⚡","🔥","✨","🎇","🎆",
+      ]
+    },
+    {
+      icon: "🍔", label: "Food",
+      emojis: [
+        "🍏","🍎","🍐","🍊","🍋","🍌","🍉","🍇","🍓","🫐","🍈","🍒","🍑","🥭",
+        "🍍","🥥","🥝","🍅","🍆","🥑","🫒","🥦","🥬","🥒","🌶️","🫑","🥕","🧄",
+        "🧅","🥔","🍠","🫚","🫘","🥐","🥯","🍞","🥖","🥨","🧀","🥚","🍳","🧈",
+        "🥞","🧇","🥓","🥩","🍗","🍖","🌭","🍔","🍟","🍕","🫓","🥪","🥙","🧆",
+        "🌮","🌯","🫔","🥗","🥘","🫕","🍝","🍜","🍲","🍛","🍣","🍱","🥟","🦪",
+        "🍤","🍙","🍚","🍘","🍥","🥮","🍢","🧁","🍰","🎂","🍮","🍭","🍬","🍫",
+        "🍿","🍩","🍪","🌰","🥜","🍯","🧃","🥤","🧋","🍵","☕","🫖","🍶","🍾",
+        "🍷","🍸","🍹","🍺","🍻","🥂","🥃","🫗","🥛","🍼","🫙","🧊","🥢","🍽️",
+        "🍴","🥄","🫙","🧂",
+      ]
+    },
+    {
+      icon: "⚽", label: "Activities",
+      emojis: [
+        "⚽","🏀","🏈","⚾","🥎","🎾","🏐","🏉","🥏","🎱","🪀","🏓","🏸","🏒",
+        "🏑","🥍","🏏","🪃","🥅","⛳","🪁","🎣","🤿","🎽","🎿","🛷","🥌","🎯",
+        "🪀","🪁","🎱","🎮","🕹️","🎲","♟️","🎭","🎨","🖼️","🎰","🚵","🏇","🧗",
+        "🤸","⛹️","🤺","🤼","🤾","🏌️","🧘","🛹","🛼","🛽","🏋️","🤼","🤸","🤾",
+        "⛷️","🏂","🪂","🏋️","🤺","🏊","🚣","🧜","🏄","🚴","🚵","🏆","🥇","🥈",
+        "🥉","🏅","🎖️","🏵️","🎗️","🎫","🎟️","🎪","🤹","🎬","🎤","🎧","🎼","🎵",
+        "🎶","🎷","🪗","🎸","🎹","🪘","🎺","🎻","🪕","🥁","🪇","🪈",
+      ]
+    },
+    {
+      icon: "🚗", label: "Travel",
+      emojis: [
+        "🚗","🚕","🚙","🚌","🚎","🏎️","🚓","🚑","🚒","🚐","🛻","🚚","🚛","🚜",
+        "🏍️","🛵","🛺","🚲","🛴","🛹","🛼","🚏","🛣️","🛤️","⛽","🚧","⚓","🛟",
+        "⛵","🚤","🛥️","🛳️","⛴️","🚢","✈️","🛩️","🛫","🛬","🪂","💺","🚁","🚟",
+        "🚠","🚡","🛰️","🚀","🛸","🪐","💫","🌍","🌎","🌏","🗺️","🧭","🏔️","⛰️",
+        "🌋","🗻","🏕️","🏖️","🏜️","🏝️","🏞️","🏟️","🏛️","🏗️","🧱","🪨","🪵","🛖",
+        "🏘️","🏚️","🏠","🏡","🏢","🏣","🏤","🏥","🏦","🏨","🏩","🏪","🏫","🏬",
+        "🏭","🏯","🏰","💒","🗼","🗽","⛪","🕌","🛕","🕍","⛩️","🕋","⛲","⛺",
+        "🌁","🌃","🏙️","🌄","🌅","🌆","🌇","🌉","🗾","🎑","🏞️","🌌","🌠","🎇",
+        "🎆","🌇","🗓️","🗺️",
+      ]
+    },
+    {
+      icon: "💡", label: "Objects",
+      emojis: [
+        "⌚","📱","📲","💻","⌨️","🖥️","🖨️","🖱️","🖲️","💽","💾","💿","📀","🧮",
+        "📷","📸","📹","🎥","📽️","🎞️","📞","☎️","📟","📠","📺","📻","🧭","⏱️",
+        "⏲️","⏰","🕰️","⌛","⏳","📡","🔋","🪫","🔌","💡","🔦","🕯️","🪔","🧯",
+        "🛢️","💸","💵","💴","💶","💷","🪙","💰","💳","💎","⚖️","🪜","🧰","🔧",
+        "🪛","🔩","⚙️","🗜️","🔗","⛓️","🪝","🧲","🪜","🔫","💣","🪓","🔪","🗡️",
+        "⚔️","🛡️","🚬","⚰️","🪦","⚱️","🏺","🔮","📿","🧿","🪬","💈","⚗️","🔭",
+        "🔬","🩻","🩹","🩺","💊","💉","🩸","🧬","🦠","🧫","🧪","🌡️","🧹","🪣",
+        "🧺","🧻","🪠","🚽","🚿","🛁","🪥","🧼","🫧","🪒","🧴","🧷","🧽","🪤",
+        "🪑","🚪","🛋️","🛏️","🛌","🧸","🪆","🖼️","🪞","🪟","🧳","🌂","☂️","🧵",
+        "🪡","🧶","🪢","👓","🕶️","🥽","🌂","☂️","🎒","🧳","👝","👛","👜","💼",
+        "🎩","🧢","👒","🎓","⛑️","🪖","👑","💍","👗","👔","👕","👖","🧣","🧤",
+        "🧥","🥼","🦺","👚","👙","🩱","👘","🥻","🩲","🩳","👙","👗","👒","🛍️",
+        "📦","📫","📪","📬","📭","📮","📯","📜","📃","📄","📑","🧾","📊","📈",
+        "📉","🗒️","🗓️","📆","📅","🗑️","📁","📂","🗂️","🗃️","🗳️","🗄️","🗑️","📋",
+        "📌","📍","📎","🖇️","📏","📐","✂️","🗃️","🖊️","🖋️","✒️","🖌️","🖍️","📝",
+        "✏️","🔍","🔎","🔏","🔐","🔒","🔓",
+      ]
+    },
+    {
+      icon: "💯", label: "Symbols",
+      emojis: [
+        "❤️","🧡","💛","💚","💙","💜","🖤","🤍","🤎","🩷","🩵","🩶","♈","♉",
+        "♊","♋","♌","♍","♎","♏","♐","♑","♒","♓","⛎","🔀","🔁","🔂","▶️",
+        "⏩","⏭️","⏯️","◀️","⏪","⏮️","🔼","⏫","🔽","⏬","⏸️","⏹️","⏺️","🎦",
+        "🔅","🔆","📶","🛜","📳","📴","📵","📴","🚫","🚳","🚭","🚯","🚱","🚷",
+        "📵","🔞","☢️","☣️","⬆️","↗️","➡️","↘️","⬇️","↙️","⬅️","↖️","↕️","↔️",
+        "↩️","↪️","⤴️","⤵️","🔃","🔄","🔙","🔚","🔛","🔜","🔝","🛐","⚛️","🕉️",
+        "✡️","☸️","☯️","✝️","☦️","🛐","⛎","♾️","💲","💱","✔️","❌","❎","➕",
+        "➖","➗","🟰","♾️","‼️","⁉️","❓","❔","❕","❗","〰️","💹","🔱","⚜️",
+        "🏁","🚩","🎌","🏴","🏳️","🏳️‍🌈","🏳️‍⚧️","🏴‍☠️","🔰","♻️","✅","🈴","🈵",
+        "🈹","🈲","🅰️","🅱️","🆎","🆑","🅾️","🆘","❌","⭕","🛑","⛔","📛","🚫",
+        "💯","💢","♨️","🚷","🚯","🚳","🚱","🔞","📵","🔕","🔇","📴","📳",
+        "🔈","🔉","🔊","📣","📢","🔔","🔕","🎵","🎶","✨","💫","⭐","🌟","💥",
+        "❇️","✳️","🔸","🔹","🔶","🔷","🔺","🔻","💠","🔘","🔲","🔳","⬛","⬜",
+        "◼️","◻️","◾","◽","▪️","▫️","🟥","🟧","🟨","🟩","🟦","🟪","🟫","⚫","⚪",
+        "🔴","🟠","🟡","🟢","🔵","🟣","🟤","🔺","🔻","🔷","🔶","🔹","🔸","🔲",
+        "💤","🔅","🔆","🔱","📛","🔰","♻️","🔃","🔄","🔙","🔚","🔛","🔜","🔝",
+        "1️⃣","2️⃣","3️⃣","4️⃣","5️⃣","6️⃣","7️⃣","8️⃣","9️⃣","0️⃣","🔟","🔢","#️⃣","*️⃣",
+      ]
+    },
+    {
+      icon: "🏳️", label: "Flags",
+      emojis: [
+        "🏁","🚩","🎌","🏴","🏳️","🏳️‍🌈","🏳️‍⚧️","🏴‍☠️",
+        "🇦🇨","🇦🇩","🇦🇪","🇦🇫","🇦🇬","🇦🇮","🇦🇱","🇦🇲","🇦🇴","🇦🇶","🇦🇷","🇦🇸","🇦🇹","🇦🇺",
+        "🇦🇼","🇦🇽","🇦🇿","🇧🇦","🇧🇧","🇧🇩","🇧🇪","🇧🇫","🇧🇬","🇧🇭","🇧🇮","🇧🇯","🇧🇱","🇧🇲",
+        "🇧🇳","🇧🇴","🇧🇶","🇧🇷","🇧🇸","🇧🇹","🇧🇻","🇧🇼","🇧🇾","🇧🇿","🇨🇦","🇨🇨","🇨🇩","🇨🇫",
+        "🇨🇬","🇨🇭","🇨🇮","🇨🇰","🇨🇱","🇨🇲","🇨🇳","🇨🇴","🇨🇵","🇨🇷","🇨🇺","🇨🇻","🇨🇼","🇨🇽",
+        "🇨🇾","🇨🇿","🇩🇪","🇩🇬","🇩🇯","🇩🇰","🇩🇲","🇩🇴","🇩🇿","🇪🇦","🇪🇨","🇪🇪","🇪🇬","🇪🇭",
+        "🇪🇷","🇪🇸","🇪🇹","🇪🇺","🇫🇮","🇫🇯","🇫🇰","🇫🇲","🇫🇴","🇫🇷","🇬🇦","🇬🇧","🇬🇩","🇬🇪",
+        "🇬🇫","🇬🇬","🇬🇭","🇬🇮","🇬🇱","🇬🇲","🇬🇳","🇬🇵","🇬🇶","🇬🇷","🇬🇸","🇬🇹","🇬🇺","🇬🇼",
+        "🇬🇾","🇭🇰","🇭🇲","🇭🇳","🇭🇷","🇭🇹","🇭🇺","🇮🇨","🇮🇩","🇮🇪","🇮🇱","🇮🇲","🇮🇳","🇮🇴",
+        "🇮🇶","🇮🇷","🇮🇸","🇮🇹","🇯🇪","🇯🇲","🇯🇴","🇯🇵","🇰🇪","🇰🇬","🇰🇭","🇰🇮","🇰🇲","🇰🇳",
+        "🇰🇵","🇰🇷","🇰🇼","🇰🇾","🇰🇿","🇱🇦","🇱🇧","🇱🇨","🇱🇮","🇱🇰","🇱🇷","🇱🇸","🇱🇹","🇱🇺",
+        "🇱🇻","🇱🇾","🇲🇦","🇲🇨","🇲🇩","🇲🇪","🇲🇫","🇲🇬","🇲🇭","🇲🇰","🇲🇱","🇲🇲","🇲🇳","🇲🇴",
+        "🇲🇵","🇲🇶","🇲🇷","🇲🇸","🇲🇹","🇲🇺","🇲🇻","🇲🇼","🇲🇽","🇲🇾","🇲🇿","🇳🇦","🇳🇨","🇳🇪",
+        "🇳🇫","🇳🇬","🇳🇮","🇳🇱","🇳🇴","🇳🇵","🇳🇷","🇳🇺","🇳🇿","🇴🇲","🇵🇦","🇵🇪","🇵🇫","🇵🇬",
+        "🇵🇭","🇵🇰","🇵🇱","🇵🇲","🇵🇳","🇵🇷","🇵🇸","🇵🇹","🇵🇼","🇵🇾","🇶🇦","🇷🇪","🇷🇴","🇷🇸",
+        "🇷🇺","🇷🇼","🇸🇦","🇸🇧","🇸🇨","🇸🇩","🇸🇪","🇸🇬","🇸🇭","🇸🇮","🇸🇯","🇸🇰","🇸🇱","🇸🇲",
+        "🇸🇳","🇸🇴","🇸🇷","🇸🇸","🇸🇹","🇸🇻","🇸🇽","🇸🇾","🇸🇿","🇹🇦","🇹🇨","🇹🇩","🇹🇫","🇹🇬",
+        "🇹🇭","🇹🇯","🇹🇰","🇹🇱","🇹🇲","🇹🇳","🇹🇴","🇹🇷","🇹🇹","🇹🇻","🇹🇼","🇹🇿","🇺🇦","🇺🇬",
+        "🇺🇲","🇺🇳","🇺🇸","🇺🇾","🇺🇿","🇻🇦","🇻🇨","🇻🇪","🇻🇬","🇻🇮","🇻🇳","🇻🇺","🇼🇫","🇼🇸",
+        "🇽🇰","🇾🇪","🇾🇹","🇿🇦","🇿🇲","🇿🇼",
+        "🏴󠁧󠁢󠁥󠁮󠁧󠁿","🏴󠁧󠁢󠁳󠁣󠁴󠁿","🏴󠁧󠁢󠁷󠁬󠁳󠁿",
+      ]
+    },
+  ];
+  /* ════════════════════════════════════════════════ */
+</script>
+
+<!-- SCREEN 0: SETUP -->
+<div class="screen" id="screenSetup">
+
+  <div class="setup-logo">🤖</div>
+  <div class="setup-title">Emoji Messenger<br><span>Setup</span></div>
+
+  <!-- Step 1: Bot token -->
+  <div class="setup-section">
+    <div class="setup-section-title">Step 1 — Create a Telegram Bot</div>
+    <div class="setup-step"><div class="setup-step-num">1</div><div>Open Telegram and search for <code>@BotFather</code></div></div>
+    <div class="setup-step"><div class="setup-step-num">2</div><div>Send <code>/newbot</code> and follow the prompts — pick any name and username</div></div>
+    <div class="setup-step"><div class="setup-step-num">3</div><div>BotFather will give you a token like <code>123456:ABC-xyz…</code> — paste it below</div></div>
+    <div class="setup-field">
+      <div class="setup-label">Bot Token</div>
+      <input class="setup-input" id="inputToken" type="text" placeholder="123456789:ABCdef-GHIjkl…" autocomplete="off" spellcheck="false" />
+    </div>
+  </div>
+
+  <!-- Step 2: Child name -->
+  <div class="setup-section">
+    <div class="setup-section-title">Step 2 — Child's Name</div>
+    <div class="setup-step"><div class="setup-step-num">1</div><div>This name appears on the app header and is signed to every message sent</div></div>
+    <div class="setup-field">
+      <div class="setup-label">Child's name</div>
+      <input class="setup-input" id="inputChildName" type="text" placeholder="Sofia" autocomplete="off" />
+    </div>
+  </div>
+
+  <!-- Step 3: Destinations -->
+  <div class="setup-section">
+    <div class="setup-section-title">Step 3 — Who Can They Message?</div>
+    <div class="setup-step"><div class="setup-step-num">1</div><div>Add the bot to each group chat, or have each person send <code>/start</code> to the bot in a DM</div></div>
+    <div class="setup-step"><div class="setup-step-num">2</div><div>To find a chat ID: visit <code>api.telegram.org/bot&lt;TOKEN&gt;/getUpdates</code> after sending a message — look for <code>"id"</code> inside <code>"chat"</code>. Groups have a negative ID.</div></div>
+    <div class="setup-label" style="margin-top:4px">Contacts <span style="opacity:0.5;font-weight:700;font-size:0.75rem">— emoji · name · chat ID</span></div>
+    <div class="dest-editor" id="destEditor"></div>
+    <button class="btn-add-dest" id="btnAddDest">+ Add contact</button>
+  </div>
+
+  <!-- Step 4: Kiosk setup -->
+  <div class="setup-section">
+    <div class="setup-section-title">Step 4 — Lock the Phone (Kiosk Mode)</div>
+    <div class="kiosk-instructions">
+      <b>Option A — Screen Pinning (easiest, built-in):</b><br>
+      Open the app in Chrome → go to Settings → Security → Screen Pinning → enable it. Then open Recent Apps, find Chrome, and tap the pin icon. The phone is now locked to this page. To unpin: hold Back + Recents simultaneously.<br><br>
+      <b>Option B — Guided Access style via Chrome:</b><br>
+      Add this page to the home screen (Chrome menu → "Add to Home Screen"). Then enable Screen Pinning as above. The app will launch full-screen with no browser chrome.<br><br>
+      <b>Tip:</b> Set the Chrome homepage to this file's URL so it always opens here after a reboot. You can host the file for free on <b>GitHub Pages</b> — just put it in a repo and enable Pages. Each child gets their own file with their own token and name.
+    </div>
+  </div>
+
+  <div class="setup-error" id="setupError"></div>
+
+  <button class="btn-save-setup" id="btnSaveSetup">Save &amp; Start →</button>
+
+</div>
+
+<!-- SCREEN 1: CHAT LIST -->
+<div class="screen active" id="screenList">
+  <div class="list-header" style="display:flex;align-items:flex-start;justify-content:space-between;">
+    <div>
+      <div class="name-badge" id="listBadge"></div>
+      <div class="list-subtitle">Who do you want to message?</div>
+    </div>
+    <button class="btn-settings" id="btnOpenSetup" title="Settings">⚙️</button>
+  </div>
+  <div class="dest-list" id="destList"></div>
+</div>
+
+<!-- SCREEN 2: CHAT VIEW -->
+<div class="screen" id="screenChat">
+  <div class="chat-topbar">
+    <button class="btn-icon" id="btnBack">←</button>
+    <div class="chat-topbar-avatar" id="chatAvatar"></div>
+    <div class="chat-topbar-name"   id="chatName"></div>
+    <button class="btn-icon btn-refresh" id="btnRefresh">↻</button>
+  </div>
+
+  <div class="msg-list" id="msgList"></div>
+
+  <div class="tray-wrap">
+    <div class="tray-scroll" id="tray">
+      <span class="tray-placeholder" id="trayPlaceholder">tap emojis below…</span>
+    </div>
+    <div class="tray-actions">
+      <button class="btn-backspace" id="btnErase">⌫</button>
+      <button class="btn-send" id="btnSend" disabled>
+        Send <span class="count-badge" id="countBadge">0</span>
+      </button>
+    </div>
+  </div>
+
+  <div class="picker-wrap">
+    <div class="cat-tabs" id="catTabs"></div>
+    <div class="emoji-grid" id="emojiGrid"></div>
+  </div>
+
+  <div class="status-bar" id="statusBar"></div>
+</div>
+
+<script>
+  /* ── State ── */
+  let currentDest  = null;
+  let trayEmojis   = [];
+  let isSending    = false;
+  let updateOffset = {};
+  let activeCat    = 0;
+
+  /* ── Runtime config (overridden by saved setup) ── */
+  let CFG_CHILD_NAME   = CHILD_NAME;
+  let CFG_BOT_TOKEN    = BOT_TOKEN;
+  let CFG_DESTINATIONS = DESTINATIONS;
+
+  /* ════════════════════════════════
+     SETUP SCREEN LOGIC
+  ════════════════════════════════ */
+  const SETUP_KEY = 'emoji_kiosk_setup';
+
+  function loadSetup() {
+    try { return JSON.parse(localStorage.getItem(SETUP_KEY) || 'null'); }
+    catch { return null; }
+  }
+  function saveSetup(data) {
+    localStorage.setItem(SETUP_KEY, JSON.stringify(data));
+  }
+
+  // Destination rows in setup form
+  let setupDests = [];
+
+  function addDestRow(avatar='🧑', label='', chatId='') {
+    setupDests.push({ avatar, label, chatId });
+    renderDestEditor();
+  }
+
+  function renderDestEditor() {
+    const editor = document.getElementById('destEditor');
+    editor.innerHTML = '';
+    setupDests.forEach((d, i) => {
+      const row = document.createElement('div');
+      row.className = 'dest-row';
+      row.innerHTML = `
+        <input class="setup-input input-avatar" value="${d.avatar}" maxlength="4" placeholder="👵" data-i="${i}" data-field="avatar" />
+        <input class="setup-input" value="${d.label}" placeholder="Grandma" data-i="${i}" data-field="label" />
+        <input class="setup-input input-chatid" value="${d.chatId}" placeholder="Chat ID" data-i="${i}" data-field="chatId" />
+        <button class="btn-remove-dest" data-i="${i}">✕</button>`;
+      editor.appendChild(row);
+    });
+    // live editing
+    editor.querySelectorAll('.setup-input').forEach(inp => {
+      inp.addEventListener('input', e => {
+        const i = +e.target.dataset.i;
+        const f = e.target.dataset.field;
+        setupDests[i][f] = e.target.value;
+      });
+    });
+    editor.querySelectorAll('.btn-remove-dest').forEach(btn => {
+      btn.addEventListener('click', e => {
+        setupDests.splice(+e.target.dataset.i, 1);
+        renderDestEditor();
+      });
+    });
+  }
+
+  function populateSetupForm(saved) {
+    if (saved) {
+      document.getElementById('inputToken').value     = saved.botToken    || '';
+      document.getElementById('inputChildName').value = saved.childName   || '';
+      setupDests = (saved.destinations || []).map(d => ({...d}));
+    } else {
+      // pre-fill from hardcoded config as example
+      document.getElementById('inputToken').value     = BOT_TOKEN !== 'YOUR_BOT_TOKEN' ? BOT_TOKEN : '';
+      document.getElementById('inputChildName').value = CHILD_NAME;
+      setupDests = CFG_DESTINATIONS.map(d => ({
+        avatar: d.avatar, label: d.label, chatId: d.chatId
+      }));
+    }
+    renderDestEditor();
+  }
+
+  document.getElementById('btnAddDest').addEventListener('click', () => addDestRow());
+
+  document.getElementById('btnSaveSetup').addEventListener('click', () => {
+    const token     = document.getElementById('inputToken').value.trim();
+    const childName = document.getElementById('inputChildName').value.trim();
+    const errEl     = document.getElementById('setupError');
+
+    if (!token || !token.includes(':')) {
+      errEl.textContent = 'Please enter a valid bot token (it should contain a colon, like 123456:ABCdef…)';
+      errEl.classList.add('visible');
+      return;
+    }
+    if (!childName) {
+      errEl.textContent = "Please enter the child's name.";
+      errEl.classList.add('visible');
+      return;
+    }
+    if (setupDests.length === 0) {
+      errEl.textContent = 'Add at least one contact to message.';
+      errEl.classList.add('visible');
+      return;
+    }
+    const invalidDest = setupDests.find(d => !d.label || !d.chatId);
+    if (invalidDest) {
+      errEl.textContent = 'Each contact needs a name and a chat ID.';
+      errEl.classList.add('visible');
+      return;
+    }
+    errEl.classList.remove('visible');
+
+    const data = {
+      botToken:     token,
+      childName,
+      destinations: setupDests.map((d, i) => ({
+        avatar:     d.avatar || '🧑',
+        label:      d.label,
+        chatId:     d.chatId,
+        storageKey: 'chat_' + d.label.toLowerCase().replace(/\s+/g, '_') + '_' + i,
+      }))
+    };
+    saveSetup(data);
+    applyConfig(data);
+    initApp();
+    showScreen('screenList');
+  });
+
+  document.getElementById('btnOpenSetup').addEventListener('click', () => {
+    populateSetupForm(loadSetup());
+    showScreen('screenSetup');
+  });
+
+  function applyConfig(data) {
+    CFG_BOT_TOKEN    = data.botToken;
+    CFG_CHILD_NAME   = data.childName;
+    CFG_DESTINATIONS = data.destinations;
+  }
+
+  /* ── Boot ── */
+  (function boot() {
+    const saved = loadSetup();
+    if (saved && saved.botToken && saved.childName && saved.destinations?.length) {
+      applyConfig(saved);
+      initApp();
+      showScreen('screenList');
+    } else {
+      populateSetupForm(null);
+      showScreen('screenSetup');
+    }
+  })();
+
+  function initApp() {
+    document.getElementById('listBadge').textContent = CFG_CHILD_NAME + "'s Messages";
+    document.getElementById('destList').innerHTML = '';
+    buildDestList();
+    if (!document.getElementById('catTabs').hasChildNodes()) buildPicker();
+  }
+
+  /* ════════════════════════════════
+     SCREENS
+  ════════════════════════════════ */
+  function showScreen(id) {
+    document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+    document.getElementById(id).classList.add('active');
+  }
+
+  /* ════════════════════════════════
+     CHAT LIST
+  ════════════════════════════════ */
+  function buildDestList() {
+    const listEl = document.getElementById('destList');
+    CFG_DESTINATIONS.forEach(dest => {
+      const card = document.createElement('div');
+      card.className = 'dest-card';
+      card.innerHTML = `
+        <div class="dest-avatar">${dest.avatar}</div>
+        <div class="dest-info">
+          <div class="dest-name">${dest.label}</div>
+          <div class="dest-preview" id="preview_${dest.storageKey}">No messages yet</div>
+        </div>
+        <div class="dest-arrow">›</div>`;
+      card.addEventListener('click', () => openChat(dest));
+      listEl.appendChild(card);
+    });
+    refreshPreviews();
+  }
+
+  function refreshPreviews() {
+    CFG_DESTINATIONS.forEach(dest => {
+      const msgs = loadMessages(dest.storageKey);
+      const el   = document.getElementById('preview_' + dest.storageKey);
+      if (!el || msgs.length === 0) return;
+      const last = msgs[msgs.length - 1];
+      el.textContent = (last.out ? 'You: ' : last.sender + ': ') + last.text;
+    });
+  }
+
+  /* ════════════════════════════════
+     OPEN CHAT
+  ════════════════════════════════ */
+  function openChat(dest) {
+    currentDest = dest;
+    trayEmojis  = [];
+    renderTray();
+    document.getElementById('chatAvatar').textContent = dest.avatar;
+    document.getElementById('chatName').textContent   = dest.label;
+    setStatus('', '');
+    renderMessages(false);
+    showScreen('screenChat');
+  }
+
+  document.getElementById('btnBack').addEventListener('click', () => {
+    refreshPreviews();
+    showScreen('screenList');
+  });
+
+
+
+  /* ════════════════════════════════
+     MESSAGES
+  ════════════════════════════════ */
+  function renderMessages(popLast) {
+    const msgs   = loadMessages(currentDest.storageKey);
+    const listEl = document.getElementById('msgList');
+    listEl.innerHTML = '';
+
+    if (msgs.length === 0) {
+      listEl.innerHTML = `<div class="empty-chat"><div class="empty-icon">💬</div><div class="empty-text">No messages yet — say hi!</div></div>`;
+      return;
+    }
+
+    msgs.forEach((msg, i) => {
+      const row = document.createElement('div');
+      row.className = 'msg-row ' + (msg.out ? 'out' : 'in');
+
+      if (!msg.out) {
+        const sender = document.createElement('div');
+        sender.className = 'msg-sender';
+        sender.textContent = msg.sender;
+        row.appendChild(sender);
+      }
+
+      const bubble = document.createElement('div');
+      bubble.className = 'msg-bubble' + (popLast && i === msgs.length - 1 ? ' popping' : '');
+      bubble.textContent = msg.text;
+      row.appendChild(bubble);
+
+      const time = document.createElement('div');
+      time.className = 'msg-time';
+      time.textContent = msg.time;
+      row.appendChild(time);
+
+      listEl.appendChild(row);
+    });
+
+    listEl.scrollTop = listEl.scrollHeight;
+  }
+
+  /* ════════════════════════════════
+     EMOJI PICKER  (categories + grid)
+  ════════════════════════════════ */
+  function buildPicker() {
+    const tabsEl = document.getElementById('catTabs');
+
+    EMOJI_CATEGORIES.forEach((cat, i) => {
+      const tab = document.createElement('button');
+      tab.className   = 'cat-tab' + (i === 0 ? ' active' : '');
+      tab.textContent = cat.icon;
+      tab.title       = cat.label;
+      tab.addEventListener('click', () => switchCategory(i));
+      tabsEl.appendChild(tab);
+    });
+
+    renderCategory(0);
+  }
+
+  function switchCategory(idx) {
+    activeCat = idx;
+    document.querySelectorAll('.cat-tab').forEach((t, i) =>
+      t.classList.toggle('active', i === idx)
+    );
+    renderCategory(idx);
+  }
+
+  function renderCategory(idx) {
+    const grid = document.getElementById('emojiGrid');
+    grid.innerHTML = '';
+    grid.scrollTop = 0;
+
+    EMOJI_CATEGORIES[idx].emojis.forEach(emoji => {
+      const btn = document.createElement('button');
+      btn.className   = 'emoji-btn';
+      btn.textContent = emoji;
+      btn.addEventListener('click', () => addToTray(emoji));
+      grid.appendChild(btn);
+    });
+  }
+
+  /* ════════════════════════════════
+     TRAY
+  ════════════════════════════════ */
+  function addToTray(emoji) {
+    if (isSending || trayEmojis.length >= MAX_EMOJIS) return;
+    trayEmojis.push(emoji);
+    renderTray();
+  }
+
+  document.getElementById('btnErase').addEventListener('click', () => {
+    if (isSending || trayEmojis.length === 0) return;
+    // remove last emoji (handles multi-codepoint sequences)
+    const seg = new Intl.Segmenter();
+    const segs = [...seg.segment(trayEmojis.join(''))].map(s => s.segment);
+    segs.pop();
+    trayEmojis = segs;
+    renderTray();
+  });
+
+  function renderTray() {
+    const trayEl      = document.getElementById('tray');
+    const placeholder = document.getElementById('trayPlaceholder');
+    const btnSend     = document.getElementById('btnSend');
+    const badge       = document.getElementById('countBadge');
+    const empty       = trayEmojis.length === 0;
+
+    placeholder.style.display = empty ? '' : 'none';
+    let content = trayEl.querySelector('.tray-content');
+    if (!content) {
+      content = document.createElement('span');
+      content.className = 'tray-content';
+      trayEl.appendChild(content);
+    }
+    content.textContent = trayEmojis.join('');
+    trayEl.scrollTop    = trayEl.scrollHeight;
+    badge.textContent   = trayEmojis.length;
+    btnSend.disabled    = empty || isSending;
+  }
+
+  /* ════════════════════════════════
+     SEND
+  ════════════════════════════════ */
+  document.getElementById('btnSend').addEventListener('click', sendMessage);
+
+  async function sendMessage() {
+    if (isSending || trayEmojis.length === 0) return;
+    isSending = true;
+    document.getElementById('btnSend').disabled = true;
+    setStatus('sending', 'Sending…');
+
+    const text = trayEmojis.join('') + '  — ' + CFG_CHILD_NAME;
+
+    try {
+      const res  = await fetch(
+        `https://api.telegram.org/bot${CFG_BOT_TOKEN}/sendMessage`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ chat_id: currentDest.chatId, text }),
+        }
+      );
+      const json = await res.json();
+      if (!json.ok) throw new Error(json.description || 'Telegram error');
+
+      saveMessage(currentDest.storageKey, {
+        out: true, sender: CFG_CHILD_NAME,
+        text: trayEmojis.join(''),
+        time: formatTime(new Date()),
+      });
+
+      trayEmojis = [];
+      renderTray();
+      renderMessages(true);
+      flashScreen();
+      setStatus('sent', '✓ Sent!');
+
+    } catch (err) {
+      console.error(err);
+      setStatus('error', '✗ Something went wrong — try again');
+      document.getElementById('btnSend').disabled = false;
+    } finally {
+      isSending = false;
+      setTimeout(() => {
+        setStatus('', '');
+        if (trayEmojis.length === 0) document.getElementById('btnSend').disabled = true;
+      }, 2500);
+    }
+  }
+
+  /* ════════════════════════════════
+     REFRESH
+  ════════════════════════════════ */
+  document.getElementById('btnRefresh').addEventListener('click', fetchIncoming);
+
+  async function fetchIncoming() {
+    if (!currentDest) return;
+    const btn = document.getElementById('btnRefresh');
+    btn.classList.add('spinning');
+    setStatus('sending', 'Checking for messages…');
+
+    const key    = currentDest.storageKey;
+    const offset = updateOffset[key] || 0;
+
+    try {
+      const res  = await fetch(`https://api.telegram.org/bot${CFG_BOT_TOKEN}/getUpdates?offset=${offset}&limit=50`);
+      const json = await res.json();
+      if (!json.ok) throw new Error(json.description);
+
+      let newCount = 0;
+      json.result.forEach(update => {
+        updateOffset[key] = Math.max(updateOffset[key] || 0, update.update_id + 1);
+        const msg = update.message || update.channel_post;
+        if (!msg) return;
+        if (String(msg.chat.id) !== String(currentDest.chatId)) return;
+        const text = msg.text || '';
+        if (text.endsWith('— ' + CFG_CHILD_NAME)) return;
+        const sender = msg.from ? (msg.from.first_name || 'Someone') : (msg.chat.title || 'Someone');
+        saveMessage(key, { out: false, text, sender, time: formatTime(new Date(msg.date * 1000)) });
+        newCount++;
+      });
+
+      if (newCount > 0) {
+        renderMessages(false);
+        setStatus('sent', `↓ ${newCount} new message${newCount > 1 ? 's' : ''}!`);
+      } else {
+        setStatus('', 'No new messages');
+      }
+    } catch (err) {
+      console.error(err);
+      setStatus('error', '✗ Couldn\'t fetch messages');
+    } finally {
+      btn.classList.remove('spinning');
+      setTimeout(() => setStatus('', ''), 2500);
+    }
+  }
+
+  /* ════════════════════════════════
+     STORAGE
+  ════════════════════════════════ */
+  function loadMessages(key) {
+    try { return JSON.parse(localStorage.getItem(key) || '[]'); }
+    catch { return []; }
+  }
+  function saveMessage(key, msg) {
+    const msgs = loadMessages(key);
+    msgs.push(msg);
+    if (msgs.length > MAX_STORED) msgs.splice(0, msgs.length - MAX_STORED);
+    localStorage.setItem(key, JSON.stringify(msgs));
+  }
+
+  /* ════════════════════════════════
+     HELPERS
+  ════════════════════════════════ */
+  function setStatus(cls, text) {
+    const el = document.getElementById('statusBar');
+    el.textContent = text;
+    el.className   = 'status-bar' + (cls ? ' ' + cls : '');
+  }
+  function formatTime(d) {
+    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  }
+  function flashScreen() {
+    const f = document.createElement('div');
+    f.className = 'sent-flash';
+    document.body.appendChild(f);
+    f.addEventListener('animationend', () => f.remove());
+  }
+</script>
+</body>
+</html>
